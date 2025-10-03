@@ -3,7 +3,9 @@
     "allow": [
       "Bash(curl:*)",
       "Read(//c/Users/diffl/Downloads/**)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "WebSearch",
+      "Bash(copy:*)"
     ],
     "deny": [],
     "ask": []

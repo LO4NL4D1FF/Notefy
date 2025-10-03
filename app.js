@@ -10,6 +10,7 @@
 const state = {
     notes: [],
     activeId: null,
+    openTabs: [], // Array of note IDs that are open as tabs
     filter: {
         query: '',
         tag: null
@@ -25,6 +26,7 @@ const state = {
 
 const STORAGE_KEY = 'notes_md_v1';
 const THEME_KEY = 'notes_md_theme';
+const WELCOME_SEEN_KEY = 'notes_md_welcome_seen';
 
 /**
  * Load notes from LocalStorage
@@ -64,7 +66,10 @@ function createNote() {
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        archived: false
+        archived: false,
+        starred: false,
+        coverImage: null,
+        images: {}
     };
     state.notes.unshift(note);
     saveNotes(state.notes);
@@ -287,7 +292,10 @@ function renderList() {
             tabindex="0"
             role="listitem"
             aria-label="${escapeHtml(note.title)}">
-            <div class="note-item-title">${escapeHtml(note.title)}</div>
+            <div class="note-item-title">
+                ${note.starred ? '<svg class="note-item-star" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' : ''}
+                ${escapeHtml(note.title)}
+            </div>
             <div class="note-item-meta">
                 <span>${formatTimestamp(note.updatedAt)}</span>
             </div>
@@ -378,28 +386,142 @@ function renderMain() {
     noNoteSelected.style.display = 'none';
 
     const titleInput = document.getElementById('noteTitle');
-    const editorTextarea = document.getElementById('noteEditor');
+    const unifiedEditor = document.getElementById('unifiedEditor');
+    const coverImageContainer = document.getElementById('coverImageContainer');
+    const coverImage = document.getElementById('coverImage');
+    const starBtn = document.getElementById('starNoteBtn');
+    const addCoverBtn = document.getElementById('addCoverBtn');
+    const createdDate = document.getElementById('createdDate');
 
     titleInput.value = note.title;
-    editorTextarea.value = note.content;
 
-    renderPreview();
+    // Set editor content without triggering input event
+    if (unifiedEditor.textContent !== note.content) {
+        unifiedEditor.textContent = note.content;
+    }
+
+    // Handle cover image
+    if (note.coverImage) {
+        coverImageContainer.style.display = 'block';
+        coverImage.src = note.coverImage;
+        addCoverBtn.style.display = 'none';
+    } else {
+        coverImageContainer.style.display = 'none';
+        addCoverBtn.style.display = 'flex';
+    }
+
+    // Handle star
+    if (note.starred) {
+        starBtn.classList.add('starred');
+    } else {
+        starBtn.classList.remove('starred');
+    }
+
+    // Show created date
+    const dateStr = new Date(note.createdAt).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+    });
+    createdDate.textContent = `Created ${dateStr}`;
+
+    highlightTags();
     renderCounts();
     renderStatus('Ready');
 }
 
 /**
- * Render markdown preview
+ * Highlight tags in the unified editor
  */
-const renderPreview = debounce(() => {
-    if (!state.activeId) return;
+function highlightTags() {
+    const editor = document.getElementById('unifiedEditor');
+    if (!editor) return;
 
-    const note = getNoteById(state.activeId);
-    if (!note) return;
+    const selection = saveSelection(editor);
+    const text = editor.textContent;
 
-    const preview = document.getElementById('notePreview');
-    preview.innerHTML = parseMarkdown(note.content);
-}, 200);
+    // Find all tags and wrap them
+    const tagRegex = /(?:^|\s)(#[a-z0-9_-]{2,24})(?=\s|$)/gi;
+    let html = '';
+    let lastIndex = 0;
+    let match;
+
+    while ((match = tagRegex.exec(text)) !== null) {
+        const beforeTag = text.substring(lastIndex, match.index);
+        const whitespace = match[0].startsWith(' ') || match[0].startsWith('\n') ? match[0][0] : '';
+        const tag = match[1];
+
+        html += escapeHtml(beforeTag) + whitespace + `<span class="tag">${escapeHtml(tag)}</span>`;
+        lastIndex = tagRegex.lastIndex;
+    }
+
+    html += escapeHtml(text.substring(lastIndex));
+
+    // Only update if content changed
+    if (editor.innerHTML !== html) {
+        editor.innerHTML = html;
+        restoreSelection(editor, selection);
+    }
+}
+
+/**
+ * Save cursor position
+ */
+function saveSelection(el) {
+    const sel = window.getSelection();
+    if (sel.rangeCount === 0) return null;
+
+    const range = sel.getRangeAt(0);
+    const preSelectionRange = range.cloneRange();
+    preSelectionRange.selectNodeContents(el);
+    preSelectionRange.setEnd(range.startContainer, range.startOffset);
+    const start = preSelectionRange.toString().length;
+
+    return {
+        start: start,
+        end: start + range.toString().length
+    };
+}
+
+/**
+ * Restore cursor position
+ */
+function restoreSelection(el, savedSel) {
+    if (!savedSel) return;
+
+    let charIndex = 0;
+    const range = document.createRange();
+    range.setStart(el, 0);
+    range.collapse(true);
+    const nodeStack = [el];
+    let node;
+    let foundStart = false;
+    let stop = false;
+
+    while (!stop && (node = nodeStack.pop())) {
+        if (node.nodeType === 3) {
+            const nextCharIndex = charIndex + node.length;
+            if (!foundStart && savedSel.start >= charIndex && savedSel.start <= nextCharIndex) {
+                range.setStart(node, savedSel.start - charIndex);
+                foundStart = true;
+            }
+            if (foundStart && savedSel.end >= charIndex && savedSel.end <= nextCharIndex) {
+                range.setEnd(node, savedSel.end - charIndex);
+                stop = true;
+            }
+            charIndex = nextCharIndex;
+        } else {
+            let i = node.childNodes.length;
+            while (i--) {
+                nodeStack.push(node.childNodes[i]);
+            }
+        }
+    }
+
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+}
 
 /**
  * Render word count
@@ -407,11 +529,11 @@ const renderPreview = debounce(() => {
 function renderCounts() {
     if (!state.activeId) return;
 
-    const note = getNoteById(state.activeId);
-    if (!note) return;
+    const unifiedEditor = document.getElementById('unifiedEditor');
+    if (!unifiedEditor) return;
 
     const wordCount = document.getElementById('wordCount');
-    const count = countWords(note.content);
+    const count = countWords(unifiedEditor.textContent || '');
     wordCount.textContent = `${count} word${count !== 1 ? 's' : ''}`;
 }
 
@@ -440,7 +562,12 @@ function escapeHtml(text) {
  * Select a note
  */
 function selectNote(id) {
+    // Open in tab if not already open
+    if (!state.openTabs.includes(id)) {
+        state.openTabs.push(id);
+    }
     state.activeId = id;
+    renderTabs();
     renderList();
     renderMain();
 
@@ -448,6 +575,79 @@ function selectNote(id) {
     setTimeout(() => {
         document.getElementById('noteTitle').focus();
     }, 0);
+}
+
+/**
+ * Render tabs
+ */
+function renderTabs() {
+    const tabsContainer = document.getElementById('tabsContainer');
+
+    tabsContainer.innerHTML = state.openTabs.map(noteId => {
+        const note = getNoteById(noteId);
+        if (!note) return '';
+
+        return `
+            <button class="note-tab ${noteId === state.activeId ? 'active' : ''}" data-id="${noteId}">
+                <span class="note-tab-title">${escapeHtml(note.title)}</span>
+                <span class="note-tab-close" data-close="${noteId}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </span>
+            </button>
+        `;
+    }).join('');
+
+    // Add click listeners
+    tabsContainer.querySelectorAll('.note-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            if (!e.target.closest('.note-tab-close')) {
+                selectNote(tab.dataset.id);
+            }
+        });
+    });
+
+    // Add close listeners
+    tabsContainer.querySelectorAll('.note-tab-close').forEach(closeBtn => {
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeTab(closeBtn.dataset.close);
+        });
+    });
+}
+
+/**
+ * Close a tab
+ */
+function closeTab(noteId) {
+    const index = state.openTabs.indexOf(noteId);
+    if (index > -1) {
+        state.openTabs.splice(index, 1);
+    }
+
+    // If closing active tab, switch to another tab or clear
+    if (state.activeId === noteId) {
+        if (state.openTabs.length > 0) {
+            state.activeId = state.openTabs[state.openTabs.length - 1];
+        } else {
+            state.activeId = null;
+        }
+    }
+
+    renderTabs();
+    renderMain();
+}
+
+/**
+ * Close all tabs
+ */
+function closeAllTabs() {
+    state.openTabs = [];
+    state.activeId = null;
+    renderTabs();
+    renderMain();
 }
 
 /**
@@ -512,11 +712,11 @@ const autosave = debounce(() => {
     renderStatus('Saving...');
 
     const titleInput = document.getElementById('noteTitle');
-    const editorTextarea = document.getElementById('noteEditor');
+    const unifiedEditor = document.getElementById('unifiedEditor');
 
     updateNoteFields(state.activeId, {
         title: titleInput.value || 'Untitled',
-        content: editorTextarea.value
+        content: unifiedEditor.textContent || ''
     });
 
     renderStatus('Saved just now');
@@ -539,21 +739,157 @@ function handleSearch(query) {
 }
 
 /**
- * Export notes
+ * Export current note as .txt
  */
-function handleExport() {
-    const dataStr = JSON.stringify(state.notes, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
+function handleExportNote() {
+    if (!state.activeId) return;
+
+    const note = getNoteById(state.activeId);
+    if (!note) return;
+
+    let content = `${note.title}\n${'='.repeat(note.title.length)}\n\n`;
+
+    // Add metadata
+    content += `Created: ${new Date(note.createdAt).toLocaleString()}\n`;
+    content += `Updated: ${new Date(note.updatedAt).toLocaleString()}\n`;
+    if (note.tags.length > 0) {
+        content += `Tags: ${note.tags.map(t => '#' + t).join(' ')}\n`;
+    }
+    content += '\n---\n\n';
+
+    // Add cover image placeholder
+    if (note.coverImage) {
+        content += '[an image is here!]\n\n';
+    }
+
+    // Process content and replace inline images
+    let noteContent = note.content;
+    if (note.images) {
+        Object.keys(note.images).forEach(imageId => {
+            const regex = new RegExp(`\\[Image inserted: ([^\\]]+)\\]\\(${imageId}\\)`, 'g');
+            noteContent = noteContent.replace(regex, '[an image is here!]');
+        });
+    }
+
+    content += noteContent;
+
+    // Sanitize filename
+    const filename = note.title.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 50) || 'untitled';
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-
-    const date = new Date().toISOString().split('T')[0];
     link.href = url;
-    link.download = `notes-export-${date}.json`;
+    link.download = `${filename}.txt`;
     link.click();
-
     URL.revokeObjectURL(url);
-    showToast('Notes exported successfully');
+    showToast('Note exported');
+}
+
+/**
+ * Export all notes as .txt files in a ZIP
+ */
+function handleExportAll() {
+    const JSZip = window.JSZip;
+
+    // If JSZip is not available, export as single text file
+    if (!JSZip) {
+        exportAllAsSingleTextFile();
+        return;
+    }
+
+    const zip = new JSZip();
+    const date = new Date().toISOString().split('T')[0];
+
+    state.notes.forEach(note => {
+        if (note.archived) return;
+
+        let content = `${note.title}\n${'='.repeat(note.title.length)}\n\n`;
+
+        // Add metadata
+        content += `Created: ${new Date(note.createdAt).toLocaleString()}\n`;
+        content += `Updated: ${new Date(note.updatedAt).toLocaleString()}\n`;
+        if (note.tags.length > 0) {
+            content += `Tags: ${note.tags.map(t => '#' + t).join(' ')}\n`;
+        }
+        content += '\n---\n\n';
+
+        // Add cover image placeholder
+        if (note.coverImage) {
+            content += '[an image is here!]\n\n';
+        }
+
+        // Process content and replace inline images
+        let noteContent = note.content;
+        if (note.images) {
+            Object.keys(note.images).forEach(imageId => {
+                const regex = new RegExp(`\\[Image inserted: ([^\\]]+)\\]\\(${imageId}\\)`, 'g');
+                noteContent = noteContent.replace(regex, '[an image is here!]');
+            });
+        }
+
+        content += noteContent;
+
+        // Sanitize filename
+        const filename = note.title.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 50) || 'untitled';
+        const timestamp = note.createdAt;
+        zip.file(`${filename}_${timestamp}.txt`, content);
+    });
+
+    zip.generateAsync({ type: 'blob' }).then(blob => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `notefy-export-${date}.zip`;
+        link.click();
+        URL.revokeObjectURL(url);
+        showToast('All notes exported');
+    });
+}
+
+/**
+ * Export all notes as single text file (fallback)
+ */
+function exportAllAsSingleTextFile() {
+    const date = new Date().toISOString().split('T')[0];
+    let content = `Notefy Export - ${date}\n${'='.repeat(50)}\n\n`;
+
+    state.notes.forEach((note, index) => {
+        if (note.archived) return;
+
+        content += `\n\n${note.title}\n${'-'.repeat(note.title.length)}\n\n`;
+
+        content += `Created: ${new Date(note.createdAt).toLocaleString()}\n`;
+        content += `Updated: ${new Date(note.updatedAt).toLocaleString()}\n`;
+        if (note.tags.length > 0) {
+            content += `Tags: ${note.tags.map(t => '#' + t).join(' ')}\n`;
+        }
+        content += '\n';
+
+        if (note.coverImage) {
+            content += '[an image is here!]\n\n';
+        }
+
+        let noteContent = note.content;
+        if (note.images) {
+            Object.keys(note.images).forEach(imageId => {
+                const regex = new RegExp(`\\[Image inserted: ([^\\]]+)\\]\\(${imageId}\\)`, 'g');
+                noteContent = noteContent.replace(regex, '[an image is here!]');
+            });
+        }
+
+        content += noteContent;
+        content += '\n\n' + '='.repeat(50);
+    });
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `notefy-export-${date}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('All notes exported');
 }
 
 /**
@@ -594,9 +930,7 @@ function handleImport(file) {
 
             renderTags();
             renderList();
-            if (!state.activeId && state.notes.length > 0) {
-                selectNote(state.notes[0].id);
-            }
+            renderMain();
 
             showToast(`Imported ${added} new, merged ${merged} existing notes`);
         } catch (error) {
@@ -645,19 +979,173 @@ function handleKeyboard(e) {
         document.getElementById('searchInput').focus();
     }
 
-    // F6 - Toggle focus editor/preview
-    if (e.key === 'F6') {
+    // Ctrl/Cmd + B - Bold
+    if (modifier && e.key === 'b') {
         e.preventDefault();
-        const editor = document.getElementById('noteEditor');
-        const preview = document.getElementById('notePreview');
-
-        if (document.activeElement === editor) {
-            preview.focus();
-            preview.tabIndex = 0;
-        } else {
-            editor.focus();
-        }
+        document.execCommand('bold', false, null);
     }
+
+    // Ctrl/Cmd + I - Italic
+    if (modifier && e.key === 'i') {
+        e.preventDefault();
+        document.execCommand('italic', false, null);
+    }
+
+    // Ctrl/Cmd + U - Underline
+    if (modifier && e.key === 'u') {
+        e.preventDefault();
+        document.execCommand('underline', false, null);
+    }
+
+    // Esc - Close all tabs
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        closeAllTabs();
+    }
+}
+
+/**
+ * Handle cover image upload
+ */
+function handleCoverImageUpload(e) {
+    if (!state.activeId || e.target.files.length === 0) return;
+
+    const file = e.target.files[0];
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+        updateNoteFields(state.activeId, {
+            coverImage: event.target.result,
+            coverPosition: 'center' // Default position
+        });
+        renderMain();
+        setupCoverImageDrag();
+        showToast('Cover image added');
+    };
+
+    reader.readAsDataURL(file);
+    e.target.value = '';
+}
+
+/**
+ * Setup cover image drag to reposition
+ */
+function setupCoverImageDrag() {
+    const container = document.getElementById('coverImageContainer');
+    const image = document.getElementById('coverImage');
+    if (!container || !image) return;
+
+    let isDragging = false;
+    let startY = 0;
+    let startPosition = 50; // percentage
+
+    container.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startY = e.clientY;
+        const currentPosition = image.style.objectPosition || 'center';
+        startPosition = parseInt(currentPosition) || 50;
+        container.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+
+        const deltaY = e.clientY - startY;
+        const containerHeight = container.offsetHeight;
+        const percentChange = (deltaY / containerHeight) * 100;
+        let newPosition = startPosition + percentChange;
+
+        // Clamp between 0 and 100
+        newPosition = Math.max(0, Math.min(100, newPosition));
+
+        image.style.objectPosition = `center ${newPosition}%`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            container.style.cursor = 'move';
+
+            // Save position
+            if (state.activeId) {
+                const position = image.style.objectPosition;
+                updateNoteFields(state.activeId, { coverPosition: position });
+            }
+        }
+    });
+}
+
+/**
+ * Handle remove cover image
+ */
+function handleRemoveCover() {
+    if (!state.activeId) return;
+    updateNoteFields(state.activeId, { coverImage: null });
+    renderMain();
+    showToast('Cover image removed');
+}
+
+/**
+ * Handle toggle star
+ */
+function handleToggleStar() {
+    if (!state.activeId) return;
+    const note = getNoteById(state.activeId);
+    if (!note) return;
+
+    updateNoteFields(state.activeId, { starred: !note.starred });
+    renderMain();
+    renderList();
+    showToast(note.starred ? 'Note unstarred' : 'Note starred');
+}
+
+/**
+ * Handle insert image
+ */
+function handleInsertImage(e) {
+    if (!state.activeId || e.target.files.length === 0) return;
+
+    const file = e.target.files[0];
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+        const note = getNoteById(state.activeId);
+        if (!note) return;
+
+        // Store image with unique ID
+        if (!note.images) note.images = {};
+        const imageId = `img_${Date.now()}`;
+        note.images[imageId] = event.target.result;
+
+        const editor = document.getElementById('unifiedEditor');
+        const imageMarkdown = `\n[an image is here!]\n`;
+
+        // Insert at cursor position
+        const sel = window.getSelection();
+        if (sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            const textNode = document.createTextNode(imageMarkdown);
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+            range.setEndAfter(textNode);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } else {
+            editor.textContent += imageMarkdown;
+        }
+
+        // Save note with images
+        saveNotes(state.notes);
+
+        // Trigger autosave
+        autosave();
+        highlightTags();
+        showToast('Image inserted');
+    };
+
+    reader.readAsDataURL(file);
+    e.target.value = '';
 }
 
 // ===========================
@@ -665,24 +1153,26 @@ function handleKeyboard(e) {
 // ===========================
 
 /**
- * Initialize app
+ * Show welcome screen for first-time users
  */
-function init() {
-    // Load theme
-    const savedTheme = localStorage.getItem(THEME_KEY);
-    if (savedTheme) {
-        state.theme = savedTheme;
-        document.body.className = savedTheme === 'light' ? 'light' : '';
+function checkWelcomeScreen() {
+    const hasSeenWelcome = localStorage.getItem(WELCOME_SEEN_KEY);
+    const hasNotes = state.notes.length > 0;
+
+    if (!hasSeenWelcome && !hasNotes) {
+        document.getElementById('welcomeScreen').style.display = 'flex';
+        return true;
     }
+    return false;
+}
 
-    // Load notes
-    state.notes = loadNotes();
-
-    // Create default note if empty
-    if (state.notes.length === 0) {
-        const defaultNote = createNote();
-        defaultNote.title = 'Welcome to Notefy';
-        defaultNote.content = `# Welcome to Notefy
+/**
+ * Create tutorial note
+ */
+function createTutorialNote() {
+    const tutorialNote = createNote();
+    tutorialNote.title = 'Welcome to Notefy';
+    tutorialNote.content = `# Welcome to Notefy
 
 A fast, offline-capable Markdown notes vault.
 
@@ -720,16 +1210,33 @@ function hello() {
 
 Enjoy taking notes! 📝`;
 
-        updateNoteFields(defaultNote.id, {
-            title: defaultNote.title,
-            content: defaultNote.content
-        });
+    updateNoteFields(tutorialNote.id, {
+        title: tutorialNote.title,
+        content: tutorialNote.content
+    });
 
-        state.activeId = defaultNote.id;
-    } else {
-        // Select first note
-        state.activeId = state.notes[0].id;
+    return tutorialNote;
+}
+
+/**
+ * Initialize app
+ */
+function init() {
+    // Load theme
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    if (savedTheme) {
+        state.theme = savedTheme;
+        document.body.className = savedTheme === 'light' ? 'light' : '';
     }
+
+    // Load notes
+    state.notes = loadNotes();
+
+    // Check if welcome screen should be shown
+    const showingWelcome = checkWelcomeScreen();
+
+    // Don't auto-select any note - let user click to open
+    state.activeId = null;
 
     // Configure marked
     if (typeof marked !== 'undefined') {
@@ -744,9 +1251,42 @@ Enjoy taking notes! 📝`;
     renderList();
     renderMain();
 
+    // Welcome screen event listeners
+    document.getElementById('startFreshBtn').addEventListener('click', () => {
+        localStorage.setItem(WELCOME_SEEN_KEY, 'true');
+        document.getElementById('welcomeScreen').style.display = 'none';
+        render();
+    });
+
+    document.getElementById('takeTourBtn').addEventListener('click', () => {
+        localStorage.setItem(WELCOME_SEEN_KEY, 'true');
+        document.getElementById('welcomeScreen').style.display = 'none';
+        const tutorialNote = createTutorialNote();
+        state.activeId = tutorialNote.id;
+        render();
+    });
+
     // Event listeners
-    document.getElementById('newNoteBtn').addEventListener('click', handleNewNote);
-    document.getElementById('exportBtn').addEventListener('click', handleExport);
+    document.getElementById('newTabBtn').addEventListener('click', handleNewNote);
+
+    // Menu button for mobile
+    document.getElementById('menuBtn').addEventListener('click', () => {
+        const sidebar = document.querySelector('.sidebar');
+        sidebar.classList.toggle('open');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', (e) => {
+        const sidebar = document.querySelector('.sidebar');
+        const menuBtn = document.getElementById('menuBtn');
+        if (sidebar.classList.contains('open') &&
+            !sidebar.contains(e.target) &&
+            !menuBtn.contains(e.target)) {
+            sidebar.classList.remove('open');
+        }
+    });
+    document.getElementById('exportNoteBtn').addEventListener('click', handleExportNote);
+    document.getElementById('exportAllBtn').addEventListener('click', handleExportAll);
     document.getElementById('importBtn').addEventListener('click', () => {
         document.getElementById('importFileInput').click();
     });
@@ -759,6 +1299,25 @@ Enjoy taking notes! 📝`;
     document.getElementById('themeToggle').addEventListener('click', handleThemeToggle);
     document.getElementById('deleteNoteBtn').addEventListener('click', () => handleDeleteNote());
 
+    // Cover image handlers
+    document.getElementById('addCoverBtn').addEventListener('click', () => {
+        document.getElementById('coverImageInput').click();
+    });
+    document.getElementById('changeCoverBtn').addEventListener('click', () => {
+        document.getElementById('coverImageInput').click();
+    });
+    document.getElementById('removeCoverBtn').addEventListener('click', handleRemoveCover);
+    document.getElementById('coverImageInput').addEventListener('change', handleCoverImageUpload);
+
+    // Star handler
+    document.getElementById('starNoteBtn').addEventListener('click', handleToggleStar);
+
+    // Insert image handler
+    document.getElementById('insertImageBtn').addEventListener('click', () => {
+        document.getElementById('insertImageInput').click();
+    });
+    document.getElementById('insertImageInput').addEventListener('change', handleInsertImage);
+
     // Search
     const searchInput = document.getElementById('searchInput');
     const debouncedSearch = debounce((query) => handleSearch(query), 300);
@@ -769,31 +1328,14 @@ Enjoy taking notes! 📝`;
     titleInput.addEventListener('input', autosave);
     titleInput.addEventListener('blur', autosave);
 
-    // Editor textarea
-    const editorTextarea = document.getElementById('noteEditor');
-    editorTextarea.addEventListener('input', () => {
+    // Unified editor
+    const unifiedEditor = document.getElementById('unifiedEditor');
+    unifiedEditor.addEventListener('input', () => {
+        highlightTags();
         autosave();
-        renderPreview();
         renderCounts();
     });
-    editorTextarea.addEventListener('blur', autosave);
-
-    // Mobile view toggle
-    const viewEditorBtn = document.getElementById('viewEditorBtn');
-    const viewPreviewBtn = document.getElementById('viewPreviewBtn');
-    const splitView = document.querySelector('.split-view');
-
-    viewEditorBtn.addEventListener('click', () => {
-        viewEditorBtn.classList.add('active');
-        viewPreviewBtn.classList.remove('active');
-        splitView.classList.remove('show-preview');
-    });
-
-    viewPreviewBtn.addEventListener('click', () => {
-        viewPreviewBtn.classList.add('active');
-        viewEditorBtn.classList.remove('active');
-        splitView.classList.add('show-preview');
-    });
+    unifiedEditor.addEventListener('blur', autosave);
 
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboard);
