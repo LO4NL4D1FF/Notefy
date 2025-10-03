@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Fast, offline-capable Markdown notes vault">
+    <title>Notefy - Markdown Notes</title>
+    <link rel="icon" type="image/svg+xml" href="icons/notes.svg">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="12" y1="18" x2="12" y2="12"></line>
+                <line x1="9" y1="15" x2="15" y2="15"></line>
+            </svg>
+            <h1>Notefy</h1>
+        </div>
+        <div class="header-center">
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Search notes..." aria-label="Search notes">
+            </div>
+        </div>
+        <div class="header-right">
+            <button id="newNoteBtn" class="btn btn-primary" title="New note (Ctrl+N)" aria-label="Create new note">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>New</span>
+            </button>
+            <button id="exportBtn" class="btn" title="Export all notes" aria-label="Export notes as JSON">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </button>
+            <button id="importBtn" class="btn" title="Import notes" aria-label="Import notes from JSON">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+            </button>
+            <button id="themeToggle" class="btn" title="Toggle theme" aria-label="Toggle light/dark theme">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="tags-container" role="navigation" aria-label="Filter by tags">
+                <div id="tagChips" class="tag-chips"></div>
+            </div>
+            <div class="notes-list-container">
+                <ul id="notesList" class="notes-list" role="list" aria-label="Notes list"></ul>
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <p>No notes yet — create your first note</p>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div id="editorContainer" class="editor-container">
+                <div class="editor-header">
+                    <input type="text" id="noteTitle" class="note-title" placeholder="Untitled" aria-label="Note title">
+                    <button id="deleteNoteBtn" class="btn btn-danger" title="Delete note" aria-label="Delete current note">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="mobile-view-toggle">
+                    <button id="viewEditorBtn" class="view-toggle-btn active">Editor</button>
+                    <button id="viewPreviewBtn" class="view-toggle-btn">Preview</button>
+                </div>
+                <div class="split-view">
+                    <div class="editor-pane" id="editorPane">
+                        <textarea id="noteEditor" class="note-editor" placeholder="Start typing your markdown here...
+
+Use **bold**, *italic*, `code`, and more.
+
+Add tags like #ideas #work" aria-label="Note content editor"></textarea>
+                    </div>
+                    <div class="preview-pane" id="previewPane">
+                        <article id="notePreview" class="note-preview" aria-label="Markdown preview"></article>
+                    </div>
+                </div>
+                <footer class="status-bar">
+                    <span id="wordCount" class="status-item">0 words</span>
+                    <span id="saveStatus" class="status-item">Ready</span>
+                </footer>
+            </div>
+            <div id="noNoteSelected" class="no-note-selected">
+                <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                </svg>
+                <p>Select a note or create a new one</p>
+            </div>
+        </main>
+    </div>
+
+    <input type="file" id="importFileInput" accept="application/json" style="display: none;" aria-label="Import file input">
+
+    <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+    <script src="libs/marked.min.js"></script>
+    <script src="libs/purify.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
