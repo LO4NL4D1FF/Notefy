@@ -17,8 +17,26 @@ const state = {
     },
     theme: 'dark',
     saveTimeout: null,
-    previewTimeout: null
+    previewTimeout: null,
+    undoStack: [],
+    redoStack: [],
+    isOnline: true
 };
+
+// Cleanup function for timeouts
+function cleanup() {
+    if (state.saveTimeout) {
+        clearTimeout(state.saveTimeout);
+        state.saveTimeout = null;
+    }
+    if (state.previewTimeout) {
+        clearTimeout(state.previewTimeout);
+        state.previewTimeout = null;
+    }
+}
+
+// Call cleanup on page unload
+window.addEventListener('beforeunload', cleanup);
 
 // ===========================
 // Storage Repository
@@ -27,6 +45,81 @@ const state = {
 const STORAGE_KEY = 'notes_md_v1';
 const THEME_KEY = 'notes_md_theme';
 const WELCOME_SEEN_KEY = 'notes_md_welcome_seen';
+const DB_NAME = 'NotefyDB';
+const DB_VERSION = 1;
+const IMAGE_STORE = 'images';
+
+let db = null;
+
+/**
+ * Initialize IndexedDB for image storage
+ */
+function initDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            db = request.result;
+            resolve(db);
+        };
+
+        request.onupgradeneeded = (event) => {
+            const database = event.target.result;
+            if (!database.objectStoreNames.contains(IMAGE_STORE)) {
+                database.createObjectStore(IMAGE_STORE, { keyPath: 'id' });
+            }
+        };
+    });
+}
+
+/**
+ * Save image to IndexedDB
+ */
+async function saveImageToDB(id, dataUrl) {
+    if (!db) await initDB();
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([IMAGE_STORE], 'readwrite');
+        const store = transaction.objectStore(IMAGE_STORE);
+        const request = store.put({ id, dataUrl, timestamp: Date.now() });
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+/**
+ * Get image from IndexedDB
+ */
+async function getImageFromDB(id) {
+    if (!db) await initDB();
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([IMAGE_STORE], 'readonly');
+        const store = transaction.objectStore(IMAGE_STORE);
+        const request = store.get(id);
+
+        request.onsuccess = () => resolve(request.result?.dataUrl || null);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+/**
+ * Delete image from IndexedDB
+ */
+async function deleteImageFromDB(id) {
+    if (!db) await initDB();
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([IMAGE_STORE], 'readwrite');
+        const store = transaction.objectStore(IMAGE_STORE);
+        const request = store.delete(id);
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
 
 /**
  * Load notes from LocalStorage
@@ -50,7 +143,16 @@ function saveNotes(notes) {
         return true;
     } catch (error) {
         console.error('Failed to save notes:', error);
-        showToast('Failed to save notes');
+
+        // Check if it's a quota exceeded error
+        if (error.name === 'QuotaExceededError' ||
+            error.code === 22 ||
+            error.code === 1014 ||
+            error.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+            showToast('Storage quota exceeded! Try removing images or exporting old notes.', 5000);
+        } else {
+            showToast('Failed to save notes');
+        }
         return false;
     }
 }
@@ -125,7 +227,7 @@ function getNoteById(id) {
  * Generate unique ID
  */
 function generateId() {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
 /**
@@ -270,7 +372,7 @@ function getAllTags() {
 // ===========================
 
 /**
- * Render notes list
+ * Render notes list (optimized to update specific items)
  */
 function renderList() {
     const notesList = document.getElementById('notesList');
@@ -286,7 +388,49 @@ function renderList() {
     notesList.style.display = 'block';
     emptyState.style.display = 'none';
 
-    notesList.innerHTML = filtered.map(note => `
+    // Get existing items
+    const existingItems = Array.from(notesList.querySelectorAll('.note-item'));
+    const existingIds = existingItems.map(item => item.dataset.id);
+    const filteredIds = filtered.map(note => note.id);
+
+    // Check if we can do incremental update or need full re-render
+    const needsFullRender =
+        existingIds.length !== filteredIds.length ||
+        existingIds.some((id, index) => id !== filteredIds[index]);
+
+    if (needsFullRender) {
+        // Full re-render
+        notesList.innerHTML = filtered.map(note => createNoteItemHTML(note)).join('');
+        attachNoteItemListeners(notesList);
+    } else {
+        // Just update classes for active state
+        existingItems.forEach(item => {
+            const isActive = item.dataset.id === state.activeId;
+            item.classList.toggle('active', isActive);
+        });
+    }
+}
+
+/**
+ * Create HTML for a note item
+ */
+function createNoteItemHTML(note) {
+    const query = state.filter.query.toLowerCase();
+    let titleHTML = escapeHtml(note.title);
+
+    // Highlight search matches
+    if (query) {
+        const titleLower = note.title.toLowerCase();
+        const index = titleLower.indexOf(query);
+        if (index !== -1) {
+            const before = escapeHtml(note.title.substring(0, index));
+            const match = escapeHtml(note.title.substring(index, index + query.length));
+            const after = escapeHtml(note.title.substring(index + query.length));
+            titleHTML = `${before}<mark>${match}</mark>${after}`;
+        }
+    }
+
+    return `
         <li class="note-item ${note.id === state.activeId ? 'active' : ''}"
             data-id="${note.id}"
             tabindex="0"
@@ -294,7 +438,7 @@ function renderList() {
             aria-label="${escapeHtml(note.title)}">
             <div class="note-item-title">
                 ${note.starred ? '<svg class="note-item-star" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' : ''}
-                ${escapeHtml(note.title)}
+                ${titleHTML}
             </div>
             <div class="note-item-meta">
                 <span>${formatTimestamp(note.updatedAt)}</span>
@@ -305,9 +449,13 @@ function renderList() {
                 </div>
             ` : ''}
         </li>
-    `).join('');
+    `;
+}
 
-    // Add click listeners
+/**
+ * Attach event listeners to note items
+ */
+function attachNoteItemListeners(notesList) {
     notesList.querySelectorAll('.note-item').forEach(item => {
         item.addEventListener('click', () => {
             selectNote(item.dataset.id);
@@ -365,7 +513,7 @@ function renderTags() {
 /**
  * Render main editor content
  */
-function renderMain() {
+async function renderMain() {
     const editorContainer = document.getElementById('editorContainer');
     const noNoteSelected = document.getElementById('noNoteSelected');
 
@@ -400,10 +548,20 @@ function renderMain() {
         unifiedEditor.textContent = note.content;
     }
 
-    // Handle cover image
+    // Handle cover image - load from IndexedDB if it's an ID reference
     if (note.coverImage) {
         coverImageContainer.style.display = 'block';
-        coverImage.src = note.coverImage;
+
+        // Check if it's an IndexedDB ID (starts with 'img_') or a data URL
+        if (note.coverImage.startsWith('img_')) {
+            const imageData = await getImageFromDB(note.coverImage);
+            if (imageData) {
+                coverImage.src = imageData;
+            }
+        } else {
+            coverImage.src = note.coverImage;
+        }
+
         addCoverBtn.style.display = 'none';
     } else {
         coverImageContainer.style.display = 'none';
@@ -538,11 +696,19 @@ function renderCounts() {
 }
 
 /**
- * Render save status
+ * Render save status with improved indicators
  */
 function renderStatus(status) {
     const saveStatus = document.getElementById('saveStatus');
     saveStatus.textContent = status;
+
+    // Add classes for visual feedback
+    saveStatus.classList.remove('saving', 'saved');
+    if (status === 'Saving...') {
+        saveStatus.classList.add('saving');
+    } else if (status === 'Saved just now' || status.startsWith('Saved')) {
+        saveStatus.classList.add('saved');
+    }
 }
 
 /**
@@ -583,14 +749,20 @@ function selectNote(id) {
 function renderTabs() {
     const tabsContainer = document.getElementById('tabsContainer');
 
-    tabsContainer.innerHTML = state.openTabs.map(noteId => {
+    tabsContainer.innerHTML = state.openTabs.map((noteId, index) => {
         const note = getNoteById(noteId);
         if (!note) return '';
 
         return `
-            <button class="note-tab ${noteId === state.activeId ? 'active' : ''}" data-id="${noteId}">
+            <button class="note-tab ${noteId === state.activeId ? 'active' : ''}"
+                    data-id="${noteId}"
+                    data-tab-index="${index}"
+                    tabindex="0"
+                    role="tab"
+                    aria-selected="${noteId === state.activeId}"
+                    aria-label="Tab for ${escapeHtml(note.title)}">
                 <span class="note-tab-title">${escapeHtml(note.title)}</span>
-                <span class="note-tab-close" data-close="${noteId}">
+                <span class="note-tab-close" data-close="${noteId}" aria-label="Close ${escapeHtml(note.title)}">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -605,6 +777,32 @@ function renderTabs() {
         tab.addEventListener('click', (e) => {
             if (!e.target.closest('.note-tab-close')) {
                 selectNote(tab.dataset.id);
+            }
+        });
+
+        // Add keyboard navigation for tabs
+        tab.addEventListener('keydown', (e) => {
+            const currentIndex = parseInt(tab.dataset.tabIndex);
+            const tabs = Array.from(tabsContainer.querySelectorAll('.note-tab'));
+
+            if (e.key === 'ArrowLeft' && currentIndex > 0) {
+                e.preventDefault();
+                tabs[currentIndex - 1].focus();
+            } else if (e.key === 'ArrowRight' && currentIndex < tabs.length - 1) {
+                e.preventDefault();
+                tabs[currentIndex + 1].focus();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectNote(tab.dataset.id);
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                closeTab(tab.dataset.id);
+                // Focus next or previous tab
+                if (tabs[currentIndex + 1]) {
+                    setTimeout(() => tabs[currentIndex + 1].focus(), 0);
+                } else if (tabs[currentIndex - 1]) {
+                    setTimeout(() => tabs[currentIndex - 1].focus(), 0);
+                }
             }
         });
     });
@@ -711,6 +909,9 @@ const autosave = debounce(() => {
 
     renderStatus('Saving...');
 
+    // Save undo state before making changes
+    saveUndoState();
+
     const titleInput = document.getElementById('noteTitle');
     const unifiedEditor = document.getElementById('unifiedEditor');
 
@@ -739,64 +940,106 @@ function handleSearch(query) {
 }
 
 /**
- * Export current note as .txt
+ * Export current note as .txt or .md
  */
-function handleExportNote() {
+function handleExportNote(format = 'txt') {
     if (!state.activeId) return;
 
     const note = getNoteById(state.activeId);
     if (!note) return;
 
-    let content = `${note.title}\n${'='.repeat(note.title.length)}\n\n`;
+    let content = '';
+    let mimeType = 'text/plain';
+    let extension = '.txt';
 
-    // Add metadata
-    content += `Created: ${new Date(note.createdAt).toLocaleString()}\n`;
-    content += `Updated: ${new Date(note.updatedAt).toLocaleString()}\n`;
-    if (note.tags.length > 0) {
-        content += `Tags: ${note.tags.map(t => '#' + t).join(' ')}\n`;
+    if (format === 'md') {
+        // Export as Markdown
+        content = `# ${note.title}\n\n`;
+
+        // Add metadata as frontmatter
+        content += `---\n`;
+        content += `created: ${new Date(note.createdAt).toISOString()}\n`;
+        content += `updated: ${new Date(note.updatedAt).toISOString()}\n`;
+        if (note.tags.length > 0) {
+            content += `tags: [${note.tags.join(', ')}]\n`;
+        }
+        content += `---\n\n`;
+
+        content += note.content;
+        extension = '.md';
+        mimeType = 'text/markdown';
+    } else {
+        // Export as plain text
+        content = `${note.title}\n${'='.repeat(note.title.length)}\n\n`;
+
+        // Add metadata
+        content += `Created: ${new Date(note.createdAt).toLocaleString()}\n`;
+        content += `Updated: ${new Date(note.updatedAt).toLocaleString()}\n`;
+        if (note.tags.length > 0) {
+            content += `Tags: ${note.tags.map(t => '#' + t).join(' ')}\n`;
+        }
+        content += '\n---\n\n';
+
+        // Add cover image placeholder
+        if (note.coverImage) {
+            content += '[an image is here!]\n\n';
+        }
+
+        // Process content and replace inline images
+        let noteContent = note.content;
+        if (note.images) {
+            Object.keys(note.images).forEach(imageId => {
+                const regex = new RegExp(`\\[Image inserted: ([^\\]]+)\\]\\(${imageId}\\)`, 'g');
+                noteContent = noteContent.replace(regex, '[an image is here!]');
+            });
+        }
+
+        content += noteContent;
     }
-    content += '\n---\n\n';
-
-    // Add cover image placeholder
-    if (note.coverImage) {
-        content += '[an image is here!]\n\n';
-    }
-
-    // Process content and replace inline images
-    let noteContent = note.content;
-    if (note.images) {
-        Object.keys(note.images).forEach(imageId => {
-            const regex = new RegExp(`\\[Image inserted: ([^\\]]+)\\]\\(${imageId}\\)`, 'g');
-            noteContent = noteContent.replace(regex, '[an image is here!]');
-        });
-    }
-
-    content += noteContent;
 
     // Sanitize filename
     const filename = note.title.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 50) || 'untitled';
 
-    const blob = new Blob([content], { type: 'text/plain' });
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${filename}.txt`;
+    link.download = `${filename}${extension}`;
     link.click();
     URL.revokeObjectURL(url);
-    showToast('Note exported');
+    showToast(`Note exported as ${extension}`);
+}
+
+/**
+ * Load JSZip library on-demand
+ */
+function loadJSZip() {
+    return new Promise((resolve, reject) => {
+        if (window.JSZip) {
+            resolve(window.JSZip);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'libs/jszip.min.js';
+        script.onload = () => resolve(window.JSZip);
+        script.onerror = () => reject(new Error('Failed to load JSZip'));
+        document.head.appendChild(script);
+    });
 }
 
 /**
  * Export all notes as .txt files in a ZIP
  */
-function handleExportAll() {
-    const JSZip = window.JSZip;
+async function handleExportAll() {
+    try {
+        // Load JSZip on-demand
+        const JSZip = await loadJSZip();
 
-    // If JSZip is not available, export as single text file
-    if (!JSZip) {
-        exportAllAsSingleTextFile();
-        return;
-    }
+        if (!JSZip) {
+            exportAllAsSingleTextFile();
+            return;
+        }
 
     const zip = new JSZip();
     const date = new Date().toISOString().split('T')[0];
@@ -845,6 +1088,10 @@ function handleExportAll() {
         URL.revokeObjectURL(url);
         showToast('All notes exported');
     });
+    } catch (error) {
+        console.error('Export failed:', error);
+        exportAllAsSingleTextFile();
+    }
 }
 
 /**
@@ -952,6 +1199,96 @@ function handleThemeToggle() {
 }
 
 /**
+ * Save state for undo/redo
+ */
+function saveUndoState() {
+    if (!state.activeId) return;
+
+    const note = getNoteById(state.activeId);
+    if (!note) return;
+
+    const snapshot = {
+        id: note.id,
+        title: note.title,
+        content: note.content,
+        timestamp: Date.now()
+    };
+
+    // Add to undo stack
+    state.undoStack.push(snapshot);
+
+    // Limit undo stack to 50 items
+    if (state.undoStack.length > 50) {
+        state.undoStack.shift();
+    }
+
+    // Clear redo stack when new changes are made
+    state.redoStack = [];
+}
+
+/**
+ * Undo last change
+ */
+function handleUndo() {
+    if (!state.activeId || state.undoStack.length === 0) return;
+
+    const note = getNoteById(state.activeId);
+    if (!note) return;
+
+    // Save current state to redo stack
+    state.redoStack.push({
+        id: note.id,
+        title: note.title,
+        content: note.content,
+        timestamp: Date.now()
+    });
+
+    // Get previous state
+    const previousState = state.undoStack.pop();
+
+    // Restore previous state
+    updateNoteFields(previousState.id, {
+        title: previousState.title,
+        content: previousState.content
+    });
+
+    renderMain();
+    renderList();
+    showToast('Undo');
+}
+
+/**
+ * Redo last undone change
+ */
+function handleRedo() {
+    if (!state.activeId || state.redoStack.length === 0) return;
+
+    const note = getNoteById(state.activeId);
+    if (!note) return;
+
+    // Save current state to undo stack
+    state.undoStack.push({
+        id: note.id,
+        title: note.title,
+        content: note.content,
+        timestamp: Date.now()
+    });
+
+    // Get next state
+    const nextState = state.redoStack.pop();
+
+    // Restore next state
+    updateNoteFields(nextState.id, {
+        title: nextState.title,
+        content: nextState.content
+    });
+
+    renderMain();
+    renderList();
+    showToast('Redo');
+}
+
+/**
  * Handle keyboard shortcuts
  */
 function handleKeyboard(e) {
@@ -979,6 +1316,18 @@ function handleKeyboard(e) {
         document.getElementById('searchInput').focus();
     }
 
+    // Ctrl/Cmd + Z - Undo
+    if (modifier && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+    }
+
+    // Ctrl/Cmd + Y or Ctrl/Cmd + Shift + Z - Redo
+    if ((modifier && e.key === 'y') || (modifier && e.shiftKey && e.key === 'z')) {
+        e.preventDefault();
+        handleRedo();
+    }
+
     // Ctrl/Cmd + B - Bold
     if (modifier && e.key === 'b') {
         e.preventDefault();
@@ -997,30 +1346,71 @@ function handleKeyboard(e) {
         document.execCommand('underline', false, null);
     }
 
-    // Esc - Close all tabs
-    if (e.key === 'Escape') {
+    // ? - Show keyboard shortcuts
+    if (e.key === '?' && !modifier) {
         e.preventDefault();
-        closeAllTabs();
+        showKeyboardShortcuts();
+    }
+
+    // Esc - Close all tabs or close modal
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('shortcutsModal');
+        if (modal.style.display !== 'none') {
+            modal.style.display = 'none';
+        } else {
+            e.preventDefault();
+            closeAllTabs();
+        }
+    }
+}
+
+/**
+ * Show keyboard shortcuts modal
+ */
+function showKeyboardShortcuts() {
+    document.getElementById('shortcutsModal').style.display = 'flex';
+}
+
+/**
+ * Update offline indicator
+ */
+function updateOfflineIndicator() {
+    const indicator = document.getElementById('offlineIndicator');
+    if (state.isOnline) {
+        indicator.style.display = 'none';
+    } else {
+        indicator.style.display = 'flex';
     }
 }
 
 /**
  * Handle cover image upload
  */
-function handleCoverImageUpload(e) {
+async function handleCoverImageUpload(e) {
     if (!state.activeId || e.target.files.length === 0) return;
 
     const file = e.target.files[0];
     const reader = new FileReader();
 
-    reader.onload = (event) => {
-        updateNoteFields(state.activeId, {
-            coverImage: event.target.result,
-            coverPosition: 'center' // Default position
-        });
-        renderMain();
-        setupCoverImageDrag();
-        showToast('Cover image added');
+    reader.onload = async (event) => {
+        const imageId = `img_cover_${Date.now()}`;
+
+        // Save to IndexedDB instead of LocalStorage
+        try {
+            await saveImageToDB(imageId, event.target.result);
+
+            updateNoteFields(state.activeId, {
+                coverImage: imageId, // Store ID reference instead of data URL
+                coverPosition: 'center' // Default position
+            });
+
+            renderMain();
+            setupCoverImageDrag();
+            showToast('Cover image added');
+        } catch (error) {
+            console.error('Failed to save cover image:', error);
+            showToast('Failed to save image - try a smaller file');
+        }
     };
 
     reader.readAsDataURL(file);
@@ -1078,8 +1468,19 @@ function setupCoverImageDrag() {
 /**
  * Handle remove cover image
  */
-function handleRemoveCover() {
+async function handleRemoveCover() {
     if (!state.activeId) return;
+
+    const note = getNoteById(state.activeId);
+    if (note && note.coverImage && note.coverImage.startsWith('img_')) {
+        // Delete from IndexedDB
+        try {
+            await deleteImageFromDB(note.coverImage);
+        } catch (error) {
+            console.error('Failed to delete image from DB:', error);
+        }
+    }
+
     updateNoteFields(state.activeId, { coverImage: null });
     renderMain();
     showToast('Cover image removed');
@@ -1102,46 +1503,55 @@ function handleToggleStar() {
 /**
  * Handle insert image
  */
-function handleInsertImage(e) {
+async function handleInsertImage(e) {
     if (!state.activeId || e.target.files.length === 0) return;
 
     const file = e.target.files[0];
     const reader = new FileReader();
 
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
         const note = getNoteById(state.activeId);
         if (!note) return;
 
-        // Store image with unique ID
-        if (!note.images) note.images = {};
-        const imageId = `img_${Date.now()}`;
-        note.images[imageId] = event.target.result;
+        const imageId = `img_inline_${Date.now()}`;
 
-        const editor = document.getElementById('unifiedEditor');
-        const imageMarkdown = `\n[an image is here!]\n`;
+        // Save image to IndexedDB
+        try {
+            await saveImageToDB(imageId, event.target.result);
 
-        // Insert at cursor position
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0) {
-            const range = sel.getRangeAt(0);
-            range.deleteContents();
-            const textNode = document.createTextNode(imageMarkdown);
-            range.insertNode(textNode);
-            range.setStartAfter(textNode);
-            range.setEndAfter(textNode);
-            sel.removeAllRanges();
-            sel.addRange(range);
-        } else {
-            editor.textContent += imageMarkdown;
+            // Store only the image ID reference in note metadata
+            if (!note.images) note.images = {};
+            note.images[imageId] = true; // Just track that this image exists
+
+            const editor = document.getElementById('unifiedEditor');
+            const imageMarkdown = `\n[Image: ${imageId}]\n`;
+
+            // Insert at cursor position
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                range.deleteContents();
+                const textNode = document.createTextNode(imageMarkdown);
+                range.insertNode(textNode);
+                range.setStartAfter(textNode);
+                range.setEndAfter(textNode);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            } else {
+                editor.textContent += imageMarkdown;
+            }
+
+            // Save note metadata
+            saveNotes(state.notes);
+
+            // Trigger autosave
+            autosave();
+            highlightTags();
+            showToast('Image inserted');
+        } catch (error) {
+            console.error('Failed to insert image:', error);
+            showToast('Failed to insert image - try a smaller file');
         }
-
-        // Save note with images
-        saveNotes(state.notes);
-
-        // Trigger autosave
-        autosave();
-        highlightTags();
-        showToast('Image inserted');
     };
 
     reader.readAsDataURL(file);
@@ -1221,7 +1631,15 @@ Enjoy taking notes! 📝`;
 /**
  * Initialize app
  */
-function init() {
+async function init() {
+    // Initialize IndexedDB for image storage
+    try {
+        await initDB();
+    } catch (error) {
+        console.error('Failed to initialize IndexedDB:', error);
+        showToast('Image storage unavailable - images may not save');
+    }
+
     // Load theme
     const savedTheme = localStorage.getItem(THEME_KEY);
     if (savedTheme) {
@@ -1285,7 +1703,12 @@ function init() {
             sidebar.classList.remove('open');
         }
     });
-    document.getElementById('exportNoteBtn').addEventListener('click', handleExportNote);
+    // Export note with format selection
+    document.getElementById('exportNoteBtn').addEventListener('click', () => handleExportNote('txt'));
+    document.getElementById('exportNoteBtn').addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        handleExportNote('md');
+    });
     document.getElementById('exportAllBtn').addEventListener('click', handleExportAll);
     document.getElementById('importBtn').addEventListener('click', () => {
         document.getElementById('importFileInput').click();
@@ -1339,6 +1762,35 @@ function init() {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboard);
+
+    // Keyboard shortcuts modal
+    document.getElementById('closeShortcutsModal').addEventListener('click', () => {
+        document.getElementById('shortcutsModal').style.display = 'none';
+    });
+
+    // Close modal on background click
+    document.getElementById('shortcutsModal').addEventListener('click', (e) => {
+        if (e.target.id === 'shortcutsModal') {
+            document.getElementById('shortcutsModal').style.display = 'none';
+        }
+    });
+
+    // Online/offline detection
+    window.addEventListener('online', () => {
+        state.isOnline = true;
+        updateOfflineIndicator();
+        showToast('Back online');
+    });
+
+    window.addEventListener('offline', () => {
+        state.isOnline = false;
+        updateOfflineIndicator();
+        showToast('Working offline');
+    });
+
+    // Initial online status check
+    state.isOnline = navigator.onLine;
+    updateOfflineIndicator();
 
     // PWA registration (optional)
     if ('serviceWorker' in navigator) {
