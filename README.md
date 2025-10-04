@@ -1,4 +1,4 @@
-# Notefy - Markdown Notes App
+# Notefy 
 
 A fast, offline-capable Markdown notes vault built with vanilla JavaScript. No frameworks, no build tools—just open and use.
 
