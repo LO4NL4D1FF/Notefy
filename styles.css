@@ -93,7 +93,7 @@ header {
 }
 
 .menu-btn {
-    display: none;
+    display: none !important;
 }
 
 h1 {
@@ -879,7 +879,7 @@ h1 {
     }
 
     .menu-btn {
-        display: flex;
+        display: flex !important;
     }
 
     .search-container {
