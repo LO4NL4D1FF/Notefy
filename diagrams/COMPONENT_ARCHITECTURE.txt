@@ -1,0 +1,114 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                   NOTEFY - COMPONENT ARCHITECTURE                         ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                        PRESENTATION LAYER                                 │
+│                        (User Interface)                                   │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────────┐    ┌──────────────┐    ┌────────────────────────┐    │
+│  │   HEADER     │    │   SIDEBAR    │    │     MAIN EDITOR        │    │
+│  │              │    │              │    │                        │    │
+│  │ • Tabs       │    │ • Search     │    │ • Title Input          │    │
+│  │ • Search Bar │    │ • Tag Filter │    │ • Content Editor       │    │
+│  │ • Actions    │    │ • Notes List │    │ • Cover Image          │    │
+│  │ • Theme Btn  │    │ • Empty State│    │ • Toolbar              │    │
+│  │              │    │              │    │ • Status Bar           │    │
+│  └──────────────┘    └──────────────┘    └────────────────────────┘    │
+│                                                                           │
+└───────────────────────────┬───────────────────────────────────────────────┘
+                            │
+                            │ User Events (click, input, keyboard)
+                            ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                        APPLICATION LAYER                                  │
+│                        (Business Logic)                                   │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                    STATE MANAGEMENT                             │    │
+│  │  ┌───────────────────────────────────────────────────────┐     │    │
+│  │  │  Global State Object                                  │     │    │
+│  │  │  • notes: Note[]                                      │     │    │
+│  │  │  • activeId: string | null                            │     │    │
+│  │  │  • openTabs: string[]                                 │     │    │
+│  │  │  • filter: {query, tag}                               │     │    │
+│  │  │  • undoStack: Snapshot[] (max 50)                     │     │    │
+│  │  │  • redoStack: Snapshot[]                              │     │    │
+│  │  │  • theme: 'dark' | 'light'                            │     │    │
+│  │  │  • isOnline: boolean                                  │     │    │
+│  │  └───────────────────────────────────────────────────────┘     │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │   EVENT      │  │  RENDERING   │  │   BUSINESS   │  │  UTILITY   │  │
+│  │  HANDLERS    │  │  FUNCTIONS   │  │    LOGIC     │  │ FUNCTIONS  │  │
+│  │              │  │              │  │              │  │            │  │
+│  │ handleNew    │  │ renderList() │  │ extractTags()│  │ debounce() │  │
+│  │  Note()      │  │ renderMain() │  │ autosave()   │  │ format     │  │
+│  │ handleDelete │  │ renderTags() │  │ getFiltered  │  │  Time()    │  │
+│  │  Note()      │  │ renderTabs() │  │  Notes()     │  │ parseMarkd │  │
+│  │ handleSearch │  │ renderStatus │  │ getAllTags() │  │  own()     │  │
+│  │   ()         │  │   ()         │  │ saveUndo     │  │ escape     │  │
+│  │ handleUndo() │  │ renderCounts │  │  State()     │  │  Html()    │  │
+│  │ handleExport │  │   ()         │  │              │  │ count      │  │
+│  │   ()         │  │ highlight    │  │              │  │  Words()   │  │
+│  │              │  │  Tags()      │  │              │  │            │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └────────────┘  │
+│                                                                           │
+└───────────────────────────┬───────────────────────────────────────────────┘
+                            │
+                            │ Read/Write Operations
+                            ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                          DATA LAYER                                       │
+│                       (Persistence)                                       │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌─────────────────────────┐         ┌─────────────────────────┐        │
+│  │     LOCALSTORAGE        │         │      INDEXEDDB          │        │
+│  │                         │         │                         │        │
+│  │ Storage Key:            │         │ Database: NotefyDB      │        │
+│  │ • notes_md_v1           │         │ Store: images           │        │
+│  │   ↳ Note[] metadata     │         │                         │        │
+│  │ • notes_md_theme        │         │ Schema:                 │        │
+│  │   ↳ Theme preference    │         │ • id: string (PK)       │        │
+│  │ • notes_md_welcome_seen │         │ • dataUrl: string       │        │
+│  │   ↳ Boolean flag        │         │ • timestamp: number     │        │
+│  │                         │         │                         │        │
+│  │ Capacity: ~5-10 MB      │         │ Capacity: ~50+ MB       │        │
+│  └─────────────────────────┘         └─────────────────────────┘        │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                     EXTERNAL LIBRARIES                                    │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  • Marked.js v4.0+       - Markdown to HTML parsing                      │
+│  • DOMPurify v3.0+       - XSS protection & HTML sanitization            │
+│  • JSZip v3.10+          - ZIP file creation (lazy-loaded)               │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                      SERVICE WORKER (sw.js)                               │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  • Cache application assets (HTML, CSS, JS, images)                      │
+│  • Intercept network requests                                            │
+│  • Serve cached content when offline                                     │
+│  • Enable PWA installation                                               │
+│  • Background sync (future enhancement)                                  │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+DATA FLOW:
+══════════
+
+User Input → Event Handlers → State Update → Persistence (LS/IDB)
+                                    ↓
+                              Render Functions → DOM Update → User sees changes
+
+═══════════════════════════════════════════════════════════════════════════

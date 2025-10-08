@@ -1,0 +1,72 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                         NOTEFY - USE CASE DIAGRAM                         ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+                                 System Boundary
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │                         Notefy Application                          │
+    │                                                                     │
+    │                                                                     │
+    │  ┌──────────────┐                                                  │
+    │  │              │                                                  │
+    │  │              │──────────> (Create Note)                         │
+    │  │              │                                                  │
+    │  │              │──────────> (Edit Note)                           │
+    │  │              │                                                  │
+    │  │              │──────────> (Delete Note)                         │
+    │  │     USER     │                                                  │
+    │  │              │──────────> (Search Notes)                        │
+    │  │  (Primary    │                                                  │
+    │  │   Actor)     │──────────> (Filter by Tags)                     │
+    │  │              │                                                  │
+    │  │              │──────────> (Star/Unstar Note)                   │
+    │  │              │                                                  │
+    │  │              │──────────> (Add Cover Image)                    │
+    │  │              │                                                  │
+    │  └──────────────┘──────────> (Insert Inline Image)                │
+    │         │                                                          │
+    │         │        ──────────> (Export Note as .txt/.md)            │
+    │         │                                                          │
+    │         │        ──────────> (Export All Notes as .zip)           │
+    │         │                                                          │
+    │         │        ──────────> (Import Notes from .json)            │
+    │         │                                                          │
+    │         │        ──────────> (Undo/Redo Changes)                  │
+    │         │                                                          │
+    │         │        ──────────> (Toggle Dark/Light Theme)            │
+    │         │                                                          │
+    │         │        ──────────> (Open/Close Note Tabs)               │
+    │         │                                                          │
+    │         │        ──────────> (View Keyboard Shortcuts)            │
+    │                                                                     │
+    │                                                                     │
+    └─────────────────────────────────────────────────────────────────────┘
+
+
+RELATIONSHIPS:
+═══════════════
+
+Primary Actor: User
+System: Notefy Web Application
+
+CORE USE CASES (15 total):
+────────────────────────────
+
+1.  Create Note
+2.  Edit Note
+3.  Delete Note
+4.  Search Notes
+5.  Filter by Tags
+6.  Star/Unstar Note
+7.  Add Cover Image
+8.  Insert Inline Image
+9.  Export Note (.txt/.md)
+10. Export All Notes (.zip)
+11. Import Notes (.json)
+12. Undo Changes
+13. Redo Changes
+14. Toggle Theme
+15. Open/Close Tabs
+16. View Keyboard Shortcuts
+
+═══════════════════════════════════════════════════════════════════════════

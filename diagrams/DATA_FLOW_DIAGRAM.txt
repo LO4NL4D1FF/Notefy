@@ -1,0 +1,224 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                  NOTEFY - DATA FLOW DIAGRAM (DFD)                         ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════
+LEVEL 0 - CONTEXT DIAGRAM
+═══════════════════════════════════════════════════════════════════════════
+
+                           ┌─────────────┐
+                           │             │
+                           │    USER     │
+                           │             │
+                           └──────┬──────┘
+                                  │
+                                  │
+        ┌─────────────────────────┼─────────────────────────┐
+        │                         │                         │
+        │ Create/Edit/Delete      │  View Notes             │  Import/Export
+        │ Notes                   │  Search Results         │  Files
+        │ Search/Filter           │  Status Updates         │
+        │ Commands                │  Notifications          │
+        │                         │                         │
+        ▼                         │                         ▼
+  Input Events              Visual Feedback              File I/O
+        │                         ▲                         │
+        │                         │                         │
+        └─────────────────────────┼─────────────────────────┘
+                                  │
+                                  │
+                    ┌─────────────▼──────────────┐
+                    │                            │
+                    │   NOTEFY APPLICATION       │
+                    │                            │
+                    │  • Process user input      │
+                    │  • Manage state            │
+                    │  • Render UI               │
+                    │  • Handle persistence      │
+                    │  • Process Markdown        │
+                    │  • Manage images           │
+                    │                            │
+                    └─────┬───────────────┬──────┘
+                          │               │
+                Store/    │               │    Store/
+              Retrieve    │               │    Retrieve
+              Metadata    │               │    Images
+                          │               │
+                          ▼               ▼
+                  ┌──────────────┐  ┌──────────────┐
+                  │              │  │              │
+                  │ LOCALSTORAGE │  │  INDEXEDDB   │
+                  │              │  │              │
+                  │ • Notes[]    │  │ • Images[]   │
+                  │ • Settings   │  │              │
+                  │              │  │              │
+                  └──────────────┘  └──────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+LEVEL 1 - DETAILED DATA FLOW DIAGRAM
+═══════════════════════════════════════════════════════════════════════════
+
+                              ┌──────────┐
+                              │   USER   │
+                              └─────┬────┘
+                                    │
+                                    │
+          ┌─────────────────────────┼─────────────────────────┐
+          │                         │                         │
+     Type Text               Click Button              Upload Image
+          │                         │                         │
+          ▼                         ▼                         ▼
+    ┌──────────┐            ┌──────────┐              ┌──────────┐
+    │  EDITOR  │            │  EVENT   │              │  IMAGE   │
+    │ HANDLER  │            │ HANDLERS │              │ HANDLER  │
+    └────┬─────┘            └────┬─────┘              └────┬─────┘
+         │                       │                         │
+         │ Text input            │ Click events            │ File data
+         │                       │                         │
+         └───────────────────────┼─────────────────────────┘
+                                 │
+                                 ▼
+                ┌────────────────────────────────────┐
+                │   1. STATE MANAGEMENT LAYER        │
+                │                                    │
+                │   Update State Object:             │
+                │   • state.notes[]                  │
+                │   • state.activeId                 │
+                │   • state.filter                   │
+                │   • state.undoStack                │
+                │                                    │
+                └──────┬──────────────────┬──────────┘
+                       │                  │
+              Save Note│                  │Save Image
+              Metadata │                  │Binary Data
+                       │                  │
+                       ▼                  ▼
+            ┌─────────────────┐    ┌─────────────────┐
+            │  2. STORAGE     │    │  2. IMAGE       │
+            │     LAYER       │    │     STORAGE     │
+            │                 │    │                 │
+            │  saveNotes()    │    │  saveImageToDB()│
+            │  loadNotes()    │    │  getImageFrom   │
+            │  updateNote     │    │    DB()         │
+            │    Fields()     │    │  deleteImage    │
+            │                 │    │    FromDB()     │
+            └────────┬────────┘    └────────┬────────┘
+                     │                      │
+              Write/Read                Write/Read
+                     │                      │
+                     ▼                      ▼
+          ┌─────────────────┐      ┌─────────────────┐
+          │  LOCALSTORAGE   │      │   INDEXEDDB     │
+          │                 │      │                 │
+          │  Key:           │      │  DB: NotefyDB   │
+          │  notes_md_v1    │      │  Store: images  │
+          │                 │      │                 │
+          │  Data:          │      │  Data:          │
+          │  Note[]         │      │  Image[]        │
+          └────────┬────────┘      └────────┬────────┘
+                   │                        │
+              Load on init              Load on render
+                   │                        │
+                   └────────┬───────────────┘
+                            │
+                            ▼
+                ┌───────────────────────────────────┐
+                │   3. BUSINESS LOGIC LAYER         │
+                │                                   │
+                │   • extractTags()                 │
+                │   • getFilteredNotes()            │
+                │   • debounce/autosave             │
+                │   • parseMarkdown()               │
+                │   • sanitizeHTML()                │
+                │                                   │
+                └────────────┬──────────────────────┘
+                             │
+                    Process & Transform
+                             │
+                             ▼
+                ┌───────────────────────────────────┐
+                │   4. RENDERING LAYER              │
+                │                                   │
+                │   • renderList()                  │
+                │   • renderMain()                  │
+                │   • renderTags()                  │
+                │   • renderTabs()                  │
+                │   • renderStatus()                │
+                │   • highlightTags()               │
+                │                                   │
+                └────────────┬──────────────────────┘
+                             │
+                        Update DOM
+                             │
+                             ▼
+                    ┌────────────────┐
+                    │   BROWSER DOM  │
+                    │                │
+                    │   User sees    │
+                    │   updated UI   │
+                    └────────┬───────┘
+                             │
+                             │ Visual feedback
+                             ▼
+                        ┌─────────┐
+                        │  USER   │
+                        └─────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+DATA FLOWS SUMMARY
+═══════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  Flow #  │  From              │  To                  │  Data        │
+├──────────┼────────────────────┼──────────────────────┼──────────────┤
+│    1     │  User              │  Event Handlers      │  Input       │
+│    2     │  Event Handlers    │  State Management    │  Actions     │
+│    3     │  State Management  │  Storage Functions   │  Note data   │
+│    4     │  Storage Functions │  LocalStorage        │  JSON        │
+│    5     │  Storage Functions │  IndexedDB           │  Images      │
+│    6     │  LocalStorage      │  State Management    │  Notes[]     │
+│    7     │  IndexedDB         │  Rendering Layer     │  Images      │
+│    8     │  State Management  │  Business Logic      │  Raw data    │
+│    9     │  Business Logic    │  Rendering Layer     │  Processed   │
+│   10     │  Rendering Layer   │  DOM                 │  HTML        │
+│   11     │  DOM               │  User                │  Visual      │
+└──────────┴────────────────────┴──────────────────────┴──────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+SPECIAL DATA FLOWS
+═══════════════════════════════════════════════════════════════════════════
+
+AUTOSAVE FLOW:
+──────────────
+User types → debounce (400ms) → saveUndoState() → updateNoteFields()
+  → saveNotes() → LocalStorage → renderStatus("Saved")
+
+
+TAG EXTRACTION FLOW:
+────────────────────
+User types #tag → extractTags(content) → regex match → tags[] array
+  → updateNoteFields() → saveNotes() → renderTags()
+
+
+SEARCH FLOW:
+────────────
+User types query → debounce (300ms) → state.filter.query update
+  → getFilteredNotes() → filter notes array → renderList() → highlight matches
+
+
+UNDO FLOW:
+──────────
+User presses Ctrl+Z → handleUndo() → pop from undoStack → push to redoStack
+  → updateNoteFields() → renderMain() → show toast
+
+
+IMAGE UPLOAD FLOW:
+──────────────────
+User selects file → FileReader.readAsDataURL() → base64 string
+  → saveImageToDB() → IndexedDB → note.images{id} → renderMain()
+
+
+═══════════════════════════════════════════════════════════════════════════

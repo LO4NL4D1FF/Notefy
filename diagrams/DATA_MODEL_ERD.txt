@@ -1,0 +1,165 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║              NOTEFY - ENTITY RELATIONSHIP DIAGRAM (ERD)                   ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                          PRIMARY ENTITIES                                 │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                            NOTE ENTITY                              │
+│                          (LocalStorage)                             │
+├─────────────────────────────────────────────────────────────────────┤
+│  Field Name       │  Type        │  Description                     │
+├───────────────────┼──────────────┼──────────────────────────────────┤
+│  id               │  string      │  Primary Key (unique)            │
+│  title            │  string      │  Note title                      │
+│  content          │  string      │  Markdown content                │
+│  tags             │  string[]    │  Extracted hashtags              │
+│  createdAt        │  number      │  Unix timestamp                  │
+│  updatedAt        │  number      │  Unix timestamp                  │
+│  archived         │  boolean     │  Archive status                  │
+│  starred          │  boolean     │  Favorite status                 │
+│  coverImage       │  string|null │  Image ID reference (FK)         │
+│  coverPosition    │  string      │  CSS position value              │
+│  images           │  object      │  {imageId: boolean} map          │
+└───────────────────┴──────────────┴──────────────────────────────────┘
+                            │
+                            │ references (1:1 for cover)
+                            │ references (1:N for inline images)
+                            ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                          IMAGE ENTITY                               │
+│                          (IndexedDB)                                │
+├─────────────────────────────────────────────────────────────────────┤
+│  Field Name       │  Type        │  Description                     │
+├───────────────────┼──────────────┼──────────────────────────────────┤
+│  id               │  string      │  Primary Key (img_xxx_timestamp) │
+│  dataUrl          │  string      │  Base64 encoded image data       │
+│  timestamp        │  number      │  Creation timestamp              │
+└───────────────────┴──────────────┴──────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                         APP STATE ENTITY                            │
+│                        (In-Memory Object)                           │
+├─────────────────────────────────────────────────────────────────────┤
+│  Field Name       │  Type            │  Description                 │
+├───────────────────┼──────────────────┼──────────────────────────────┤
+│  notes            │  Note[]          │  All notes in memory         │
+│  activeId         │  string | null   │  Currently selected note ID  │
+│  openTabs         │  string[]        │  Array of open note IDs      │
+│  filter           │  FilterObject    │  Search/tag filter state     │
+│  theme            │  string          │  'dark' | 'light'            │
+│  undoStack        │  Snapshot[]      │  Undo history (max 50)       │
+│  redoStack        │  Snapshot[]      │  Redo history                │
+│  isOnline         │  boolean         │  Network connectivity        │
+└───────────────────┴──────────────────┴──────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                      FILTER OBJECT (Nested)                         │
+├─────────────────────────────────────────────────────────────────────┤
+│  Field Name       │  Type            │  Description                 │
+├───────────────────┼──────────────────┼──────────────────────────────┤
+│  query            │  string          │  Search query text           │
+│  tag              │  string | null   │  Selected tag filter         │
+└───────────────────┴──────────────────┴──────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                       SNAPSHOT ENTITY                               │
+│                    (Undo/Redo History)                              │
+├─────────────────────────────────────────────────────────────────────┤
+│  Field Name       │  Type        │  Description                     │
+├───────────────────┼──────────────┼──────────────────────────────────┤
+│  id               │  string      │  Note ID reference               │
+│  title            │  string      │  Note title at snapshot          │
+│  content          │  string      │  Note content at snapshot        │
+│  timestamp        │  number      │  Snapshot creation time          │
+└───────────────────┴──────────────┴──────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+
+RELATIONSHIPS:
+══════════════
+
+1. Note → Image (Cover)
+   Cardinality: 1:0..1 (One note has zero or one cover image)
+   FK: Note.coverImage → Image.id
+
+2. Note → Images (Inline)
+   Cardinality: 1:N (One note has many inline images)
+   FK: Note.images{imageId} → Image.id
+
+3. AppState → Note
+   Cardinality: 1:N (State contains many notes)
+   Relationship: Composition (State owns notes)
+
+4. Snapshot → Note
+   Cardinality: N:1 (Many snapshots reference one note)
+   FK: Snapshot.id → Note.id
+
+
+═══════════════════════════════════════════════════════════════════════════
+
+STORAGE DISTRIBUTION:
+═════════════════════
+
+┌────────────────────────────────────────────────────────────────┐
+│                       LOCALSTORAGE                             │
+├────────────────────────────────────────────────────────────────┤
+│  Key                      │  Value Type       │  Size          │
+├───────────────────────────┼───────────────────┼────────────────┤
+│  notes_md_v1              │  Note[]           │  ~5-10 MB      │
+│  notes_md_theme           │  string           │  ~10 bytes     │
+│  notes_md_welcome_seen    │  boolean          │  ~5 bytes      │
+└───────────────────────────┴───────────────────┴────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│                         INDEXEDDB                              │
+├────────────────────────────────────────────────────────────────┤
+│  Database: NotefyDB                                            │
+│  Version: 1                                                    │
+│                                                                │
+│  Object Store: images                                          │
+│  KeyPath: id                                                   │
+│  Records: Image[]                                              │
+│  Capacity: ~50+ MB (browser dependent)                         │
+└────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+
+SAMPLE DATA:
+════════════
+
+Note Example:
+─────────────
+{
+  "id": "1704067200000-abc123xyz",
+  "title": "Project Ideas",
+  "content": "# My Ideas\n\nBuild a #productivity app\nLearn #javascript",
+  "tags": ["productivity", "javascript"],
+  "createdAt": 1704067200000,
+  "updatedAt": 1704153600000,
+  "archived": false,
+  "starred": true,
+  "coverImage": "img_cover_1704067201000",
+  "coverPosition": "center 50%",
+  "images": {
+    "img_inline_1704067202000": true,
+    "img_inline_1704067203000": true
+  }
+}
+
+Image Example:
+──────────────
+{
+  "id": "img_cover_1704067201000",
+  "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA...",
+  "timestamp": 1704067201000
+}
+
+═══════════════════════════════════════════════════════════════════════════
