@@ -20,12 +20,6 @@ A fast, offline-capable Markdown notes vault built with vanilla JavaScript. No f
 - **Undo/Redo** - Full history support with 50-state undo stack
 - **Starred Notes** - Mark important notes with stars
 
-### Keyboard Shortcuts
-Press `?` to view all keyboard shortcuts in the app, including:
-- **Navigation**: Arrow keys for tabs, shortcuts for search
-- **Editing**: Undo/Redo (Ctrl+Z/Y), Bold/Italic/Underline
-- **Actions**: Close tabs, focus search, and more
-
 ## How to Run
 
 1. **Download/Clone** this repository
@@ -101,7 +95,7 @@ Each note is stored as:
 - Each save creates an undo state for history tracking
 
 ### Undo/Redo System
-- Full undo/redo support with Ctrl+Z and Ctrl+Y
+- Full undo/redo support
 - Maintains up to 50 previous states per note
 - Automatic state snapshots on each autosave
 
@@ -160,7 +154,6 @@ Works in all modern browsers with IndexedDB support:
 - Semantic HTML with proper heading hierarchy
 - ARIA labels, roles, and live regions for screen readers
 - Full keyboard navigation (tabs, lists, modals)
-- Keyboard shortcuts modal (`?` key)
 - Focus visible states on all interactive elements
 - Respects `prefers-reduced-motion`
 - Save status announced to screen readers
@@ -234,7 +227,6 @@ This project is provided as-is for educational and personal use.
 - ✅ Undo/Redo with 50-state history
 - ✅ IndexedDB for efficient image storage
 - ✅ Offline indicator and detection
-- ✅ Keyboard shortcuts help modal
 - ✅ Search result highlighting
 - ✅ Markdown export format (.md)
 - ✅ Enhanced save status indicators

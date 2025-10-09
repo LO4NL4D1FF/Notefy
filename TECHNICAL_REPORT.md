@@ -65,7 +65,6 @@ The primary objectives of this project are:
 - **FR-17**: Users shall be able to open multiple notes in tabs
 - **FR-18**: Users shall be able to switch between tabs
 - **FR-19**: Users shall be able to close individual tabs
-- **FR-20**: Users shall be able to navigate tabs using keyboard shortcuts
 
 ### 2.5 Import/Export
 - **FR-21**: Users shall be able to export individual notes as .txt files
@@ -85,10 +84,6 @@ The primary objectives of this project are:
 - **FR-31**: Users shall see visual save status indicators
 - **FR-32**: Users shall see live word count for active note
 - **FR-33**: Users shall receive toast notifications for important actions
-
-### 2.8 Keyboard Shortcuts
-- **FR-34**: Users shall have access to keyboard shortcuts for common actions
-- **FR-35**: Users shall be able to view all keyboard shortcuts via help modal (? key)
 
 ---
 
@@ -115,7 +110,7 @@ The primary objectives of this project are:
 ### 3.4 Accessibility
 - **NFR-13**: Application shall use semantic HTML5 elements
 - **NFR-14**: All interactive elements shall have ARIA labels and roles
-- **NFR-15**: Keyboard navigation shall be fully supported
+- **NFR-15**: Navigation shall be fully supported
 - **NFR-16**: Screen readers shall announce state changes via ARIA live regions
 - **NFR-17**: Focus states shall be visible for all interactive elements
 - **NFR-18**: Application shall respect `prefers-reduced-motion` user preference
@@ -163,7 +158,6 @@ The primary objectives of this project are:
 │         │        ──────> Undo/Redo Changes                     │
 │         │        ──────> Toggle Theme                          │
 │         │        ──────> Open/Close Tabs                       │
-│         │        ──────> View Keyboard Shortcuts               │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 

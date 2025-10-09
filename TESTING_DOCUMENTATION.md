@@ -51,7 +51,7 @@
 | UI/UX | High | Responsiveness, themes |
 | Data Persistence | High | LocalStorage, IndexedDB |
 | Offline Functionality | Medium | PWA, Service Worker |
-| Accessibility | High | Keyboard nav, screen readers |
+| Accessibility | High | Navigation, screen readers |
 | Security | High | XSS protection |
 
 ### 2.2 Testing Schedule
@@ -394,47 +394,7 @@
 
 ---
 
-### 3.9 Keyboard Shortcuts Tests
-
-#### TC-023: Keyboard Shortcut - New Note
-**Objective**: Verify Ctrl+N creates note
-**Steps**:
-1. Press Ctrl+N
-2. Verify new note created
-
-**Expected Result**: ✅ Note created via keyboard
-**Actual Result**: ✅ PASS - Shortcut works
-**Status**: PASS
-
----
-
-#### TC-024: Keyboard Shortcut - Search
-**Objective**: Verify Ctrl+K focuses search
-**Steps**:
-1. Press Ctrl+K
-2. Verify search input focused
-
-**Expected Result**: ✅ Search focused
-**Actual Result**: ✅ PASS - Focus moved to search
-**Status**: PASS
-
----
-
-#### TC-025: Show Keyboard Shortcuts Modal
-**Objective**: Verify ? key shows help
-**Steps**:
-1. Press ? key
-2. Verify modal displays shortcuts
-3. Press Esc
-4. Verify modal closes
-
-**Expected Result**: ✅ Help modal works
-**Actual Result**: ✅ PASS - Modal shows and closes
-**Status**: PASS
-
----
-
-### 3.10 Security Tests
+### 3.9 Security Tests
 
 #### TC-026: XSS Protection - Script Tags
 **Objective**: Verify XSS protection works
@@ -462,7 +422,7 @@
 
 ---
 
-### 3.11 Offline Functionality Tests
+### 3.10 Offline Functionality Tests
 
 #### TC-028: Offline Indicator
 **Objective**: Verify offline detection
@@ -566,7 +526,6 @@
 | Tab Navigation | All interactive elements reachable | ✅ PASS |
 | Focus Indicators | Visible on all elements | ✅ PASS |
 | Skip Links | Not needed (simple layout) | N/A |
-| Keyboard Shortcuts | All shortcuts functional | ✅ PASS |
 
 ### 6.2 Screen Reader Testing
 
@@ -601,12 +560,12 @@
 
 | Category | Total Tests | Passed | Failed | Pass Rate |
 |----------|-------------|--------|--------|-----------|
-| Functional | 22 | 22 | 0 | 100% |
+| Functional | 19 | 19 | 0 | 100% |
 | Browser Compatibility | 8 | 8 | 0 | 100% |
 | Performance | 8 | 8 | 0 | 100% |
-| Accessibility | 12 | 12 | 0 | 100% |
+| Accessibility | 11 | 11 | 0 | 100% |
 | Security | 2 | 2 | 0 | 100% |
-| **TOTAL** | **52** | **52** | **0** | **100%** |
+| **TOTAL** | **48** | **48** | **0** | **100%** |
 
 ### 7.2 Critical Issues
 **None identified** ✅
@@ -637,8 +596,8 @@
 **Environment**: Chrome 120, Windows 11
 
 ### Execution Summary
-- **Total Test Cases**: 29 functional tests executed
-- **Passed**: 29
+- **Total Test Cases**: 26 functional tests executed
+- **Passed**: 26
 - **Failed**: 0
 - **Blocked**: 0
 - **Pass Rate**: 100%

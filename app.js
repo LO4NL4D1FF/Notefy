@@ -1288,88 +1288,6 @@ function handleRedo() {
     showToast('Redo');
 }
 
-/**
- * Handle keyboard shortcuts
- */
-function handleKeyboard(e) {
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const modifier = isMac ? e.metaKey : e.ctrlKey;
-
-    // Ctrl/Cmd + N - New note
-    if (modifier && e.key === 'n') {
-        e.preventDefault();
-        handleNewNote();
-    }
-
-    // Ctrl/Cmd + S - Force save
-    if (modifier && e.key === 's') {
-        e.preventDefault();
-        if (state.activeId) {
-            autosave();
-            autosave.flush && autosave.flush();
-        }
-    }
-
-    // Ctrl/Cmd + K - Focus search
-    if (modifier && e.key === 'k') {
-        e.preventDefault();
-        document.getElementById('searchInput').focus();
-    }
-
-    // Ctrl/Cmd + Z - Undo
-    if (modifier && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        handleUndo();
-    }
-
-    // Ctrl/Cmd + Y or Ctrl/Cmd + Shift + Z - Redo
-    if ((modifier && e.key === 'y') || (modifier && e.shiftKey && e.key === 'z')) {
-        e.preventDefault();
-        handleRedo();
-    }
-
-    // Ctrl/Cmd + B - Bold
-    if (modifier && e.key === 'b') {
-        e.preventDefault();
-        document.execCommand('bold', false, null);
-    }
-
-    // Ctrl/Cmd + I - Italic
-    if (modifier && e.key === 'i') {
-        e.preventDefault();
-        document.execCommand('italic', false, null);
-    }
-
-    // Ctrl/Cmd + U - Underline
-    if (modifier && e.key === 'u') {
-        e.preventDefault();
-        document.execCommand('underline', false, null);
-    }
-
-    // ? - Show keyboard shortcuts
-    if (e.key === '?' && !modifier) {
-        e.preventDefault();
-        showKeyboardShortcuts();
-    }
-
-    // Esc - Close all tabs or close modal
-    if (e.key === 'Escape') {
-        const modal = document.getElementById('shortcutsModal');
-        if (modal.style.display !== 'none') {
-            modal.style.display = 'none';
-        } else {
-            e.preventDefault();
-            closeAllTabs();
-        }
-    }
-}
-
-/**
- * Show keyboard shortcuts modal
- */
-function showKeyboardShortcuts() {
-    document.getElementById('shortcutsModal').style.display = 'flex';
-}
 
 /**
  * Update offline indicator
@@ -1592,14 +1510,6 @@ A fast, offline-capable Markdown notes vault.
 - **Tags** - Organize with inline tags like #ideas and #work
 - **Search** - Find notes quickly
 - **Export/Import** - Backup and restore your notes
-- **Keyboard shortcuts** - Work faster
-
-## Shortcuts
-
-- New note: Ctrl/Cmd+N
-- Save: Ctrl/Cmd+S
-- Search: Ctrl/Cmd+K
-- Focus Editor/Preview: F6
 
 ## Try it out
 
@@ -1759,21 +1669,6 @@ async function init() {
         renderCounts();
     });
     unifiedEditor.addEventListener('blur', autosave);
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', handleKeyboard);
-
-    // Keyboard shortcuts modal
-    document.getElementById('closeShortcutsModal').addEventListener('click', () => {
-        document.getElementById('shortcutsModal').style.display = 'none';
-    });
-
-    // Close modal on background click
-    document.getElementById('shortcutsModal').addEventListener('click', (e) => {
-        if (e.target.id === 'shortcutsModal') {
-            document.getElementById('shortcutsModal').style.display = 'none';
-        }
-    });
 
     // Online/offline detection
     window.addEventListener('online', () => {
